@@ -48,11 +48,14 @@ word findLastCluster(word cluster) {
 	return cluster;
 }
 
-// Given a cluster, find the next empty cluster in FAT and chain it
+// Given a cluster, find the next empty cluster in FAT, chain it
+// and don't forget to write the changed FAT
 word chainNextCluster(word cluster) {
+
+	word newCluster = cluster + 1;
+
 	if( loadFAT1()) {
 		word *clusters = (word *)vars.buffer;
-		word newCluster = cluster + 1;
 		while( clusters[newCluster] != 0x0000) {
 			newCluster++;
 		}
@@ -60,7 +63,12 @@ word chainNextCluster(word cluster) {
 		clusters[cluster] = newCluster;
 	}
 
-	return cluster;
+	for (int i = 0; i < 10; ++i) {
+		if (RES_OK == mmc::writeSectors(vars.buffer, vars.FAT1Sector, 1)) {
+		} else return cluster;
+	}
+
+	return newCluster;
 }
 
 void nanofat::test() {
@@ -180,7 +188,7 @@ bool nanofat::locateFileStart(const char* filename,
 bool nanofat::incFileSize(unsigned long extraSize) {
     vars.de->fileSize += extraSize;
 	// ToDo: really need to do this delay just in case...?
-	delay(1);
+//	delay(1);
 
 	// Write rootDir sector. 10 times???
     for (int i = 0; i < 10; ++i) {
@@ -216,17 +224,6 @@ static unsigned long fileLength;
 		word bytesInLastSector = (bytesInLastCluster% BYTESPERSECTOR);
 		unsigned long lastSector = vars.cluster2 + ((lastCluster-2) * vars.sectorsPerCluster) + sectorsInLastCluster;
 
-Serial.print("fileLength=");
-Serial.println(fileLength);
-Serial.print("lastCluster=");
-Serial.println(lastCluster);
-Serial.print("firstSector=");
-Serial.println(firstSector);
-Serial.print("lastSector=");
-Serial.println(lastSector);
-Serial.print("bytesInLastSector=");
-Serial.println(bytesInLastSector);
-
 		// We need to read this, as we're trying to append
 		if (RES_OK == mmc::readSectors(vars.buffer, lastSector, 1)) {
 			vars.isFATLoaded = false;
@@ -242,12 +239,6 @@ Serial.println(bytesInLastSector);
 		}
 		for(word i=0, j=(bytesInLastSector); i<bytesToWrite; i++, j++) {
 			vars.buffer[j] = buffer[i];
-			// It seems I need to put some delay here,
-			// or the buffer will be misscopied!!!!
-			// It's not because still reading from disk when I start this
-			// A single 1 millisecond delay do the job!!!
-			// VERY STRANGE!
-			delay(1);
 		}
 
 		// Write. 10 times???
@@ -258,6 +249,9 @@ Serial.println(bytesInLastSector);
 		
 		buffer += bytesToWrite;
 		length -= bytesToWrite;
+Serial.print("Written ");
+Serial.print(bytesToWrite);
+Serial.println(" bytes to file.");
 
 		// Loop for any reminding data to be written in next sector
 		// 1. If no more sectors left on cluster
@@ -292,6 +286,9 @@ Serial.println(bytesInLastSector);
 			// Keep going
 			buffer += bytesToWrite;
 			length -= bytesToWrite;
+Serial.print("Written ");
+Serial.print(bytesToWrite);
+Serial.println(" bytes to file.");
 		}
 		return true;
 	}
