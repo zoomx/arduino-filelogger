@@ -81,18 +81,13 @@ typedef struct {
 namespace nanofat {
 
   bool initialize(byte* buffer);
+  bool append(const char* filename, byte buffer[], unsigned long length);
   
+  // ToDo: remove from the interface these two
   bool locateFileStart(const char* filename,
 					   unsigned long &sector,
 					   unsigned long &size);
   bool incFileSize(unsigned long extraSize);
-
-  bool append(const char* filename, byte buffer[], unsigned long length);
-
-//  word findLastCluster(word cluster);
-//  bool loadFAT1();
-
-  void test();
 };
 
 
