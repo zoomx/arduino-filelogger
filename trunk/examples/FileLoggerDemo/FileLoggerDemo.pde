@@ -29,31 +29,32 @@ byte buffer[] = MESSAGE;
 void setup(void) {
   pinMode(MEM_PW, OUTPUT);
   digitalWrite(MEM_PW, HIGH);
-  Serial.begin(19200);
+  Serial.begin(9600);
 }
 
 void loop(void) {
+  char command = '0';
+  unsigned long t1, t2;
+
   // Arduino expects one of a series of one-byte commands
   if (Serial.available() > 0) {
-    int result = 0;
+    int result;
     inSerByte = Serial.read();
     switch (inSerByte) {
-    case 'W':
-      result = File_logger.append("data.log", buffer, length);
-	  Serial.print("Result: ");
-	  Serial.println(result);
+      case 'W':
+        result = File_logger.append("data.log", buffer, length);
+        Serial.print("Result: ");
+        Serial.println(result);
       break;
     case 'T':
-	  for(int i=0; i<128; i++) {
-		result = File_logger.append("data.log", buffer, length);
-		Serial.print("Result: ");
-		Serial.println(result);
+	  for(int i=0; i<10; i++) {
+              t1 = millis();
+	      File_logger.append("data.log", buffer, length);
+              t2 = millis();
+              Serial.println(t2-t1);
 	  }
+          Serial.print("Done");
       break;
     }
-
-    if (result != 0) {
-      Serial.print("ERROR: "); Serial.println(result);
-    } else Serial.println("SUCCESS");
   }
 }
