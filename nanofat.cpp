@@ -10,6 +10,9 @@
 #include "nanofat.h"
 #include "mmc.h"
 
+// ToDo: remove, THIS IS NOT NECCESSARY
+#define REWRITE_TIMES 1
+
 static struct{
   unsigned short sectorsPerCluster;
   unsigned long rootDirSect,
@@ -63,15 +66,12 @@ word chainNextCluster(word cluster) {
 		clusters[cluster] = newCluster;
 	}
 
-	for (int i = 0; i < 10; ++i) {
+	for (int i = 0; i < REWRITE_TIMES; ++i) {
 		if (RES_OK == mmc::writeSectors(vars.buffer, vars.FAT1Sector, 1)) {
 		} else return cluster;
 	}
 
 	return newCluster;
-}
-
-void nanofat::test() {
 }
 
 //
@@ -187,11 +187,9 @@ bool nanofat::locateFileStart(const char* filename,
 //
 bool nanofat::incFileSize(unsigned long extraSize) {
     vars.de->fileSize += extraSize;
-	// ToDo: really need to do this delay just in case...?
-//	delay(1);
 
 	// Write rootDir sector. 10 times???
-    for (int i = 0; i < 10; ++i) {
+    for (int i = 0; i < REWRITE_TIMES; ++i) {
         if (RES_OK == mmc::writeSectors(vars.buffer, vars.rootDirSect, 1)) {
         } else return false;
 	}
@@ -242,16 +240,13 @@ static unsigned long fileLength;
 		}
 
 		// Write. 10 times???
-		for (int i = 0; i < 10; ++i) {
+		for (int i = 0; i < REWRITE_TIMES; ++i) {
 			if (RES_OK == mmc::writeSectors(vars.buffer, lastSector, 1)) {
 			} else return false;
 		}
 		
 		buffer += bytesToWrite;
 		length -= bytesToWrite;
-Serial.print("Written ");
-Serial.print(bytesToWrite);
-Serial.println(" bytes to file.");
 
 		// Loop for any reminding data to be written in next sector
 		// 1. If no more sectors left on cluster
@@ -275,22 +270,20 @@ Serial.println(" bytes to file.");
 			if( bytesToWrite > BYTESPERSECTOR) {
 				bytesToWrite = BYTESPERSECTOR;
 			}
-			// 10 times???
 			for (unsigned int i = 0; i < bytesToWrite; ++i) {
 				vars.buffer[i] = buffer[i];
 			}
-			for (int i = 0; i < 10; ++i) {
+			// 10 times???
+			for (int i = 0; i < REWRITE_TIMES; ++i) {
 				if (RES_OK == mmc::writeSectors(vars.buffer, lastSector, 1)) {
 				} else return false;
 			}
 			// Keep going
 			buffer += bytesToWrite;
 			length -= bytesToWrite;
-Serial.print("Written ");
-Serial.print(bytesToWrite);
-Serial.println(" bytes to file.");
 		}
 		return true;
+	} else {
+		return false;
 	}
-	return false;
 }
