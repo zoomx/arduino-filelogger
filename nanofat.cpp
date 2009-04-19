@@ -10,9 +10,6 @@
 #include "nanofat.h"
 #include "mmc.h"
 
-// ToDo: remove, THIS IS NOT NECCESSARY
-#define REWRITE_TIMES 1
-
 static struct{
   unsigned short sectorsPerCluster;
   unsigned long rootDirSect,
@@ -54,7 +51,6 @@ word findLastCluster(word cluster) {
 // Given a cluster, find the next empty cluster in FAT, chain it
 // and don't forget to write the changed FAT
 word chainNextCluster(word cluster) {
-
 	word newCluster = cluster + 1;
 
 	if( loadFAT1()) {
@@ -66,10 +62,8 @@ word chainNextCluster(word cluster) {
 		clusters[cluster] = newCluster;
 	}
 
-	for (int i = 0; i < REWRITE_TIMES; ++i) {
-		if (RES_OK == mmc::writeSectors(vars.buffer, vars.FAT1Sector, 1)) {
-		} else return cluster;
-	}
+	if (RES_OK == mmc::writeSectors(vars.buffer, vars.FAT1Sector, 1)) {
+	} else return 0xFFFF;
 
 	return newCluster;
 }
@@ -171,8 +165,18 @@ bool nanofat::locateFileStart(const char* filename,
 
       // don't match with deleted, [system/volname/subdir/hidden] files
       if (de->filespec[0] != 0xe5 && (de->attributes & 0x1e) == 0 && memcmp(cookedName, de->filespec, 11) == 0) {
-        firstSector = vars.cluster2 + ((de->startCluster-2) * vars.sectorsPerCluster);
         size = de->fileSize;
+		if( size == 0) {
+			// Allocate the first sector
+			// ToDo: 1. Load FAT to find the first empty cluster
+			//		 2. Put an 0xFFFF in this cluster entry to mark as last cluster in file
+			//		 3. Write the FAT to disk
+			//		 4. Reload the root folder sector
+			//		 5. Store the located cluster in the the de->startCluster field
+			//		 6. Write the root folder to disk
+		} else {
+			firstSector = vars.cluster2 + ((de->startCluster-2) * vars.sectorsPerCluster);
+		}
         return true;
       }
     }
@@ -188,11 +192,9 @@ bool nanofat::locateFileStart(const char* filename,
 bool nanofat::incFileSize(unsigned long extraSize) {
     vars.de->fileSize += extraSize;
 
-	// Write rootDir sector. 10 times???
-    for (int i = 0; i < REWRITE_TIMES; ++i) {
-        if (RES_OK == mmc::writeSectors(vars.buffer, vars.rootDirSect, 1)) {
-        } else return false;
-	}
+	// Write rootDir sector
+    if (RES_OK == mmc::writeSectors(vars.buffer, vars.rootDirSect, 1)) {
+    } else return false;
 	
 	return true;
 }
@@ -222,7 +224,7 @@ static unsigned long fileLength;
 		word bytesInLastSector = (bytesInLastCluster% BYTESPERSECTOR);
 		unsigned long lastSector = vars.cluster2 + ((lastCluster-2) * vars.sectorsPerCluster) + sectorsInLastCluster;
 
-		// We need to read this, as we're trying to append
+		// We need to read this sector, as we're trying to append
 		if (RES_OK == mmc::readSectors(vars.buffer, lastSector, 1)) {
 			vars.isFATLoaded = false;
 		} else return false;
@@ -235,15 +237,12 @@ static unsigned long fileLength;
 		if( bytesToWrite > lastSectorFreeBytes) {
 			bytesToWrite = lastSectorFreeBytes;
 		}
-		for(word i=0, j=(bytesInLastSector); i<bytesToWrite; i++, j++) {
+		for(word i=0, j=bytesInLastSector; i<bytesToWrite; i++, j++) {
 			vars.buffer[j] = buffer[i];
 		}
 
-		// Write. 10 times???
-		for (int i = 0; i < REWRITE_TIMES; ++i) {
-			if (RES_OK == mmc::writeSectors(vars.buffer, lastSector, 1)) {
-			} else return false;
-		}
+		if (RES_OK == mmc::writeSectors(vars.buffer, lastSector, 1)) {
+		} else return false;
 		
 		buffer += bytesToWrite;
 		length -= bytesToWrite;
@@ -258,8 +257,11 @@ static unsigned long fileLength;
 		// More sectors needed?
 		while(length>0) {
 			// If this was last sector in Cluster we need to allocate new cluster
-			if( ((lastSector+1) % vars.sectorsPerCluster) == 0) {
+			if( (((lastSector-vars.cluster2)+1) % vars.sectorsPerCluster) == 0) {
 				lastCluster = chainNextCluster(lastCluster);
+				if( lastCluster == 0xFFFF) {
+					return false;
+				}
 				lastSector = vars.cluster2 + ((lastCluster-2) * vars.sectorsPerCluster) ;
 			} else {
 				lastSector++;
@@ -273,17 +275,15 @@ static unsigned long fileLength;
 			for (unsigned int i = 0; i < bytesToWrite; ++i) {
 				vars.buffer[i] = buffer[i];
 			}
-			// 10 times???
-			for (int i = 0; i < REWRITE_TIMES; ++i) {
-				if (RES_OK == mmc::writeSectors(vars.buffer, lastSector, 1)) {
-				} else return false;
-			}
+			if (RES_OK == mmc::writeSectors(vars.buffer, lastSector, 1)) {
+			} else return false;
+
 			// Keep going
 			buffer += bytesToWrite;
 			length -= bytesToWrite;
 		}
 		return true;
-	} else {
-		return false;
 	}
+	
+	return false;
 }
