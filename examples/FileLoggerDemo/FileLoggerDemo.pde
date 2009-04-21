@@ -2,7 +2,7 @@
 // Title        : FileLogger library for Arduino, example code
 // Author       : Eduardo García
 // Date         : April 2009
-// Version      : 0.1
+// Version      : 0.2
 //
 // DISCLAIMER:
 // The author is in no way responsible for any problems or damage caused by
@@ -22,7 +22,7 @@
 // variable used when reading from serial
 byte inSerByte = 0;
 
-#define MESSAGE "Hello, this is my message\r\n"
+#define MESSAGE "Hello, this is my message. Just testing the FileLogger library.\r\n"
 unsigned long length = sizeof(MESSAGE)-1;
 byte buffer[] = MESSAGE;
 
@@ -43,15 +43,26 @@ void loop(void) {
     switch (inSerByte) {
       case 'W':
         result = File_logger.append("data.log", buffer, length);
-        Serial.print("Result: ");
-        Serial.println(result);
+        Serial.print(" Result: ");
+        if( result == 0) {
+          Serial.println("OK");
+        } else if( result == 1) {
+          Serial.println("Fail initializing");
+        } else if( result == 2) {
+          Serial.println("Fail appending");
+        }
       break;
     case 'T':
 	  for(int i=0; i<10; i++) {
-              t1 = millis();
-	      File_logger.append("data.log", buffer, length);
-              t2 = millis();
-              Serial.println(t2-t1);
+	      result = File_logger.append("data.log", buffer, length);
+              Serial.print(" Result: ");
+              if( result == 0) {
+                Serial.println("OK");
+              } else if( result == 1) {
+                Serial.println("Fail initializing");
+              } else if( result == 2) {
+                Serial.println("Fail appending");
+              }
 	  }
           Serial.print("Done");
       break;

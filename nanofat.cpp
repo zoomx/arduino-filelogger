@@ -208,6 +208,8 @@ bool nanofat::append(const char* filename, byte buffer[], unsigned long length) 
 static unsigned long firstSector;
 static unsigned long fileLength;
 
+static unsigned long t1, t2;
+
     if (locateFileStart(filename, firstSector, fileLength)) {
 
 		if( !incFileSize(length)) {
@@ -240,10 +242,16 @@ static unsigned long fileLength;
 		for(word i=0, j=bytesInLastSector; i<bytesToWrite; i++, j++) {
 			vars.buffer[j] = buffer[i];
 		}
-
+/* Uncomment this to get time reports
+t1 = millis();
+*/
 		if (RES_OK == mmc::writeSectors(vars.buffer, lastSector, 1)) {
 		} else return false;
-		
+/* Uncomment this to get time reports
+t2 = millis();
+Serial.print(". Tiempo escritura sector (1): ");
+Serial.print(t2-t1);
+*/
 		buffer += bytesToWrite;
 		length -= bytesToWrite;
 
@@ -275,9 +283,17 @@ static unsigned long fileLength;
 			for (unsigned int i = 0; i < bytesToWrite; ++i) {
 				vars.buffer[i] = buffer[i];
 			}
+
+/* Uncomment this to get time reports
+t1 = millis();
+*/
 			if (RES_OK == mmc::writeSectors(vars.buffer, lastSector, 1)) {
 			} else return false;
-
+/* Uncomment this to get time reports
+t2 = millis();
+Serial.print(". Tiempo escritura sector (2): ");
+Serial.print(t2-t1);
+*/
 			// Keep going
 			buffer += bytesToWrite;
 			length -= bytesToWrite;
