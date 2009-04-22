@@ -1,4 +1,10 @@
 //
+// Title        : nanofat driver
+// Author       : Eduardo García (egarcia@stream18.com)
+// Date         : April 2009
+// Id			: $Id$
+//
+//
 // CREDITS:
 // Contains code from the microfat driver developed by David Cuartielles
 // and Ino Schlaucher for the SD_uFAT project (http://blushingboy.net/p/SDuFAT/)
