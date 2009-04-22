@@ -1,4 +1,9 @@
 //
+// Title        : FileLogger library for Arduino
+// Author       : Eduardo García (egarcia@stream18.com)
+// Date         : April 2009
+// Id			: $Id$
+//
 // CREDITS:
 //
 // DESCRIPTION:
