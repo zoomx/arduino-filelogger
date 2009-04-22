@@ -1,4 +1,5 @@
 FileLogger
+$Id$
 
 This is an attempt to get a tiny library for Arduino to log data into a file in a FAT16
 filesystem on microSD cards 
