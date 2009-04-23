@@ -12,6 +12,7 @@
 
 static struct{
   unsigned short sectorsPerCluster;
+  unsigned short bytesPerCluster;
   unsigned long rootDirSect,
 				FAT1Sector,
 			    cluster2;
@@ -104,6 +105,7 @@ bool nanofat::initialize(byte* buffer) {
   }
 
   vars.sectorsPerCluster = b->sectorsPerCluster;
+  vars.bytesPerCluster = BYTESPERSECTOR*vars.sectorsPerCluster;
 
   // Points to the first copy of FAT
   vars.FAT1Sector = bootSector + b->reservedSectors;
@@ -134,9 +136,9 @@ bool nanofat::initialize(byte* buffer) {
 // After execution the vars structure is ready to change
 // the file size in disk
 //
-bool nanofat::locateFileStart(const char* filename,
-							  unsigned long &firstSector,
-							  unsigned long &size) {
+bool locateFileStart(const char* filename,
+					 unsigned long &firstSector,
+					 unsigned long &size) {
 
   // Read the root folder's first sector
   if (RES_OK == mmc::readSectors(vars.buffer, vars.rootDirSect, 1)) {
@@ -189,12 +191,13 @@ bool nanofat::locateFileStart(const char* filename,
 // This function MUST be called, if needed, immediately after calling "locateFileStart()"
 // so we don't need to re-read the sector
 //
-bool nanofat::incFileSize(unsigned long extraSize) {
+bool incFileSize(unsigned long extraSize) {
     vars.de->fileSize += extraSize;
 
 	// Write rootDir sector
-    if (RES_OK == mmc::writeSectors(vars.buffer, vars.rootDirSect, 1)) {
-    } else return false;
+    if (RES_OK != mmc::writeSectors(vars.buffer, vars.rootDirSect, 1)) {
+		return false;
+	}
 	
 	return true;
 }
@@ -208,8 +211,6 @@ bool nanofat::append(const char* filename, byte buffer[], unsigned long length) 
 static unsigned long firstSector;
 static unsigned long fileLength;
 
-static unsigned long t1, t2;
-
     if (locateFileStart(filename, firstSector, fileLength)) {
 
 		if( !incFileSize(length)) {
@@ -218,19 +219,20 @@ static unsigned long t1, t2;
 
 		// To append, first find how many sectors in the 
 		// last cluster do I have to traverse to get the last one
-		#define firstCluster (((firstSector - vars.cluster2)/vars.sectorsPerCluster)+2)
-		#define bytesPerCluster (BYTESPERSECTOR*vars.sectorsPerCluster)
-		word lastCluster = findLastCluster(firstCluster);
-		word bytesInLastCluster = fileLength % bytesPerCluster;
+		word firstCluster = ((firstSector - vars.cluster2)/vars.sectorsPerCluster)+2;
+		word bytesInLastCluster = fileLength % vars.bytesPerCluster;
 		word sectorsInLastCluster = (bytesInLastCluster/ BYTESPERSECTOR);
 		word bytesInLastSector = (bytesInLastCluster% BYTESPERSECTOR);
+		
+		word lastCluster = findLastCluster(firstCluster);
 		unsigned long lastSector = vars.cluster2 + ((lastCluster-2) * vars.sectorsPerCluster) + sectorsInLastCluster;
 
 		// We need to read this sector, as we're trying to append
 		if (RES_OK == mmc::readSectors(vars.buffer, lastSector, 1)) {
 			vars.isFATLoaded = false;
-		} else return false;
-
+		} else {
+			return false;
+		}
 				
 		// To append, copy the input data into the buffer, after the existing data
 		word lastSectorFreeBytes = BYTESPERSECTOR - bytesInLastSector;
@@ -242,16 +244,9 @@ static unsigned long t1, t2;
 		for(word i=0, j=bytesInLastSector; i<bytesToWrite; i++, j++) {
 			vars.buffer[j] = buffer[i];
 		}
-/* Uncomment this to get time reports
-t1 = millis();
-*/
-		if (RES_OK == mmc::writeSectors(vars.buffer, lastSector, 1)) {
-		} else return false;
-/* Uncomment this to get time reports
-t2 = millis();
-Serial.print(". Tiempo escritura sector (1): ");
-Serial.print(t2-t1);
-*/
+		if (RES_OK != mmc::writeSectors(vars.buffer, lastSector, 1)) {
+			return false;
+		}
 		buffer += bytesToWrite;
 		length -= bytesToWrite;
 
@@ -284,16 +279,10 @@ Serial.print(t2-t1);
 				vars.buffer[i] = buffer[i];
 			}
 
-/* Uncomment this to get time reports
-t1 = millis();
-*/
-			if (RES_OK == mmc::writeSectors(vars.buffer, lastSector, 1)) {
-			} else return false;
-/* Uncomment this to get time reports
-t2 = millis();
-Serial.print(". Tiempo escritura sector (2): ");
-Serial.print(t2-t1);
-*/
+			if (RES_OK != mmc::writeSectors(vars.buffer, lastSector, 1)) {
+				return false;
+			}
+
 			// Keep going
 			buffer += bytesToWrite;
 			length -= bytesToWrite;
