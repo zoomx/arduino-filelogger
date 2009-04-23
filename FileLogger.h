@@ -26,17 +26,11 @@
 #ifndef FileLogger_h
 #define FileLogger_h
 
-class FileLogger {
-  private:
-  public:
+namespace FileLogger {
   
-	FileLogger(void);
-
 	// append - appends a data buffer to the file
 	int append(const char* filename, byte* buffer, unsigned long length);
 };
-
-extern FileLogger File_logger;
 
 #endif
 

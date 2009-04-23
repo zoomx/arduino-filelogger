@@ -8,11 +8,9 @@
 
 #include "FileLogger.h"
 
-byte sdBuffer[512]; // Block size for  512 bytes
-bool nanofat_initialized = false;
+static byte sdBuffer[512]; // Block size for  512 bytes
+static bool nanofat_initialized = false;
 
-FileLogger::FileLogger(){
-}
 
 bool initializeNanoFAT() {
   if(!nanofat_initialized) {
@@ -35,6 +33,3 @@ int FileLogger::append(const char* filename, byte buffer[], unsigned long length
   } else return 1;
   return 0;
 }
-
-
-FileLogger File_logger = FileLogger();
