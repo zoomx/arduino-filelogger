@@ -63,8 +63,9 @@ word chainNextCluster(word cluster) {
 		clusters[cluster] = newCluster;
 	}
 
-	if (RES_OK == mmc::writeSectors(vars.buffer, vars.FAT1Sector, 1)) {
-	} else return 0xFFFF;
+	if (RES_OK != mmc::writeSectors(vars.buffer, vars.FAT1Sector, 1)) {
+		return 0xFFFF;
+	}
 
 	return newCluster;
 }
@@ -90,7 +91,7 @@ bool nanofat::initialize(byte* buffer) {
 
   // Locate the first entry on the table of primary partitions on MBR
   partition_record* p = (partition_record*)&vars.buffer[0x1be];
-  long bootSector = p->lbaAddrOfFirstSector;
+  unsigned long bootSector = p->lbaAddrOfFirstSector;
 
   // Read the first sector of first partition on disk (VBR=Volume Boot Record)
   if (RES_OK != mmc::readSectors(vars.buffer, bootSector, 1)) {
@@ -114,10 +115,9 @@ bool nanofat::initialize(byte* buffer) {
   vars.rootDirSect = vars.FAT1Sector + (b->fatCopies * b->sectorsPerFAT);
 
   // Size of the root directory entries in bytes
-  long dirBytes = b->rootDirectoryEntries * 32;
-
+  unsigned long dirBytes = b->rootDirectoryEntries * 32;
   // Caculate the root directory entries size in sectors 
-  long dirSects = dirBytes / BYTESPERSECTOR;
+  unsigned long dirSects = dirBytes / BYTESPERSECTOR;
   if (dirBytes % BYTESPERSECTOR != 0) {
     ++dirSects;
   }

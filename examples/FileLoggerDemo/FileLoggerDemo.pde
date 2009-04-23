@@ -42,7 +42,7 @@ void loop(void) {
     inSerByte = Serial.read();
     switch (inSerByte) {
       case 'W':
-        result = File_logger.append("data.log", buffer, length);
+        result = FileLogger::append("data.log", buffer, length);
         Serial.print(" Result: ");
         if( result == 0) {
           Serial.println("OK");
@@ -54,7 +54,7 @@ void loop(void) {
       break;
     case 'T':
 	  for(int i=0; i<10; i++) {
-	      result = File_logger.append("data.log", buffer, length);
+	      result = FileLogger::append("data.log", buffer, length);
               Serial.print(" Result: ");
               if( result == 0) {
                 Serial.println("OK");
