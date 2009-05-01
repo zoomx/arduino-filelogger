@@ -7,42 +7,17 @@
 // arduino D10
 #define SS    2
 
-// arduino D11
-#define MOSI  3
-
-// arduino D12
-#define MISO  4
-
-// arduino D13
-#define SCK    5
-
 // Macros for setting slave select:
 //
-#define SPI_SS_HIGH()  PORTB |= _BV(SS)
-#define SPI_SS_LOW()   PORTB &= ~_BV(SS)
+#define SlaveSelect()    PORTB &= ~_BV(SS)
+#define SlaveDeselect()  PORTB |= _BV(SS)
 
+#define DESELECT_AFTER    	   1
+#define DONT_DESELECT_AFTER    0
 
 static volatile diskstates disk_state = DISK_ERROR;
 
-
-static byte spiTransferByte(byte data)
-{
-  // send the given data
-  SPDR = data;
-
-  // wait for transfer to complete
-  loop_until_bit_is_set(SPSR, 7);
-  // *** reading of the SPSR and SPDR are crucial
-  // *** to the clearing of the SPIF flag
-  // *** in non-interrupt mode
-
-  // return the received data
-  return SPDR;
-}
-
-
-static uint32_t spiTransferLong(const uint32_t data)
-{
+static uint32_t spiTransferLong(const uint32_t data) {
   // It seems to be necessary to use the union in order to get efficient
   // assembler code.
   // Beware, endian unsafe union
@@ -79,11 +54,10 @@ static uint32_t spiTransferLong(const uint32_t data)
 }
 
 
-static char sdResponse(byte expected)
-{
+static char sdResponse(byte expected) {
   unsigned short count = 0x0FFF;
 
-  while ((spiTransferByte(0xFF) != expected) && count )
+  while ((Spi.transfer(0xFF) != expected) && count )
     count--;
 
   // If count didn't run out, return success
@@ -91,11 +65,10 @@ static char sdResponse(byte expected)
 }
 
 
-static char sdWaitWriteFinish(void)
-{
+static char sdWaitWriteFinish(void) {
   unsigned short count = 0xFFFF; // wait for quite some time
 
-  while ((spiTransferByte(0xFF) == 0) && count )
+  while ((Spi.transfer(0xFF) == 0) && count )
     count--;
 
   // If count didn't run out, return success
@@ -105,8 +78,8 @@ static char sdWaitWriteFinish(void)
 
 static void deselectCard(void) {
   // Send 8 clock cycles
-  SPI_SS_HIGH();
-  spiTransferByte(0xff);
+  SlaveDeselect();
+  Spi.transfer(0xff);
 }
 
 static byte crc7update(byte crc, const byte data) {
@@ -163,17 +136,17 @@ const byte  deselect) {
   errorcount = 0;
   while (errorcount < CONFIG_SD_AUTO_RETRIES) {
     // Select card
-    SPI_SS_LOW();
+	SlaveSelect();
 
     // Transfer command
-    spiTransferByte(0x40+command);
+    Spi.transfer(0x40+command);
     spiTransferLong(parameter);
-    spiTransferByte(crc);
+    Spi.transfer(crc);
 
     // Wait for a valid response
     counter = 0;
     do {
-      i = spiTransferByte(0xff);
+      i = Spi.transfer(0xff);
       counter++;
     } 
     while (i & 0x80 && counter < 0x1000);
@@ -194,7 +167,6 @@ const byte  deselect) {
   return i;
 }
 
-
 byte mmc::initialize() {
   byte  i;
   uint16_t counter;
@@ -202,36 +174,17 @@ byte mmc::initialize() {
 
   disk_state = DISK_ERROR;
 
-  // setup SPI I/O pins
-  PORTB |=  _BV(SCK) | _BV(SS) | _BV(MISO); // set SCK+SS hi (no chip select), pullup on MISO
-  DDRB  |=  _BV(SCK) | _BV(SS) | _BV(MOSI); // set SCK/MOSI/SS as output
-  DDRB  &= ~_BV(MISO);                       // set MISO as input
+  Spi.mode(B01010011);
 
-  // setup SPI interface:
-  //   interrupts disabled, SPI enabled, MSB first, master mode,
-  //   leading edge rising, sample on leading edge, clock = f/4,
-  SPCR = B01010011;
-
-  // Enable SPI double speed mode -> clock = f/8
-  //  SPSR = _BV(SPI2X);
-
-  // clear status
-  i = SPSR;
-
-
-  // clear recieve buffer
-  i = SPDR;
-
-
-  SPI_SS_HIGH();
+  SlaveDeselect();
 
   // Send 80 clks
   for (i=0; i<10; i++) {
-    spiTransferByte(0xFF);
+    Spi.transfer(0xFF);
   }
 
   // Reset card
-  i = sendCommand(GO_IDLE_STATE, 0, 1);
+  i = sendCommand(GO_IDLE_STATE, 0, DESELECT_AFTER);
   if (i != 1) {
     return STA_NOINIT | STA_NODISK;
   }
@@ -241,7 +194,7 @@ byte mmc::initialize() {
   // without retries. One of my Sandisk-cards thinks otherwise.
   do {
     // Send CMD58: READ_OCR
-    i = sendCommand(READ_OCR, 0, 0);
+    i = sendCommand(READ_OCR, 0, DONT_DESELECT_AFTER);
     if (i > 1) {
       // kills my Sandisk 1G which requires the retries in the first place
       // deselectCard();
@@ -264,7 +217,7 @@ byte mmc::initialize() {
   // Keep sending CMD1 (SEND_OP_COND) command until zero response
   counter = 0xffff;
   do {
-    i = sendCommand(SEND_OP_COND, 1L<<30, 1);
+    i = sendCommand(SEND_OP_COND, 1L<<30, DESELECT_AFTER);
     counter--;
   } 
   while (i != 0 && counter > 0);
@@ -274,7 +227,7 @@ byte mmc::initialize() {
   }
 
   // Send MMC CMD16(SET_BLOCKLEN) to 512 bytes
-  i = sendCommand(SET_BLOCKLEN, 512, 1);
+  i = sendCommand(SET_BLOCKLEN, 512, DESELECT_AFTER);
   if (i != 0) {
     return STA_NOINIT | STA_NODISK;
   }
@@ -284,25 +237,23 @@ byte mmc::initialize() {
   return RES_OK;
 }
 
-
-byte mmc::readSectors(byte *buffer, uint32_t sector, byte count) {
-  byte sec,res,tmp,errorcount;
+byte mmc::readSector(byte *buffer, uint32_t sector) {
+  byte res,tmp,errorcount;
   uint16_t crc,recvcrc;
 
-  for (sec=0;sec<count;sec++) {
     errorcount = 0;
     while (errorcount < CONFIG_SD_AUTO_RETRIES) {
-      res = sendCommand(READ_SINGLE_BLOCK, (sector+sec) << 9, 0);
+      res = sendCommand(READ_SINGLE_BLOCK, (sector) << 9, DONT_DESELECT_AFTER);
 
       if (res != 0) {
-        SPI_SS_HIGH();
+		SlaveDeselect();
         disk_state = DISK_ERROR;
         return RES_ERROR;
       }
 
       // Wait for data token
       if (!sdResponse(0xFE)) {
-        SPI_SS_HIGH();
+		SlaveDeselect();
         disk_state = DISK_ERROR;
         return RES_ERROR;
       }
@@ -312,42 +263,38 @@ byte mmc::readSectors(byte *buffer, uint32_t sector, byte count) {
       // Get data
       crc = 0;
       for (i=0; i<512; i++) {
-        tmp = spiTransferByte(0xff);
+        tmp = Spi.transfer(0xff);
         *(buffer++) = tmp;
       }
 
       // Check CRC
-      recvcrc = (spiTransferByte(0xFF) << 8) + spiTransferByte(0xFF);
+      recvcrc = (Spi.transfer(0xFF) << 8) + Spi.transfer(0xFF);
 
       break;
     }
     deselectCard();
 
     if (errorcount >= CONFIG_SD_AUTO_RETRIES) return RES_ERROR;
-  }
 
   return RES_OK;
 }
 
-
-
-byte mmc::writeSectors(const byte *buffer, uint32_t sector, byte count) {
-  byte res,sec,errorcount,status;
+byte mmc::writeSector(const byte *buffer, uint32_t sector) {
+  byte res,errorcount,status;
   uint16_t crc;
 
-  for (sec=0;sec<count;sec++) {
     errorcount = 0;
     while (errorcount < CONFIG_SD_AUTO_RETRIES) {
-      res = sendCommand(WRITE_BLOCK, (sector+sec)<<9, 0);
+      res = sendCommand(WRITE_BLOCK, (sector)<<9, DONT_DESELECT_AFTER);
 
       if (res != 0) {
-        SPI_SS_HIGH();
+		SlaveDeselect();
         disk_state = DISK_ERROR;
         return RES_ERROR;
       }
 
       // Send data token
-      spiTransferByte(0xFE);
+      Spi.transfer(0xFE);
 
       uint16_t i;
       const byte *oldbuffer = buffer;
@@ -355,20 +302,19 @@ byte mmc::writeSectors(const byte *buffer, uint32_t sector, byte count) {
       // Send data
       crc = 0;
       for (i=0; i<512; i++) {
-        spiTransferByte(*(buffer++));
+        Spi.transfer(*(buffer++));
       }
 
       // Send CRC
-      spiTransferByte(crc >> 8);
-      spiTransferByte(crc & 0xff);
+      Spi.transfer(crc >> 8);
+      Spi.transfer(crc & 0xff);
 
       // Get and check status feedback
-      status = spiTransferByte(0xFF);
+      status = Spi.transfer(0xFF);
 
       // Retry if neccessary
       if ((status & 0x0F) != 0x05) {
         //	uart_putc('X');
-        deselectCard();
         errorcount++;
         buffer = oldbuffer;
         continue;
@@ -376,7 +322,7 @@ byte mmc::writeSectors(const byte *buffer, uint32_t sector, byte count) {
 
       // Wait for write finish
       if (!sdWaitWriteFinish()) {
-        SPI_SS_HIGH();
+		SlaveDeselect();
         disk_state = DISK_ERROR;
         return RES_ERROR;
       }
@@ -389,12 +335,9 @@ byte mmc::writeSectors(const byte *buffer, uint32_t sector, byte count) {
         disk_state = DISK_ERROR;
       return RES_ERROR;
     }
-  }
 
   return RES_OK;
 }
-
-
 
 diskstates mmc::checkDiskState() {
 	return disk_state;
