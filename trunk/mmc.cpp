@@ -28,27 +28,11 @@ static uint32_t spiTransferLong(const uint32_t data) {
   long2char;
 
   long2char.l = data;
-
-  // send the given data
-  SPDR = long2char.c[3];
-  // wait for transfer to complete
-  loop_until_bit_is_set(SPSR, SPIF);
-  long2char.c[3] = SPDR;
-
-  SPDR = long2char.c[2];
-  // wait for transfer to complete
-  loop_until_bit_is_set(SPSR, SPIF);
-  long2char.c[2] = SPDR;
-
-  SPDR = long2char.c[1];
-  // wait for transfer to complete
-  loop_until_bit_is_set(SPSR, SPIF);
-  long2char.c[1] = SPDR;
-
-  SPDR = long2char.c[0];
-  // wait for transfer to complete
-  loop_until_bit_is_set(SPSR, SPIF);
-  long2char.c[0] = SPDR;
+  
+  long2char.c[3] = Spi.transfer(long2char.c[3]);
+  long2char.c[2] = Spi.transfer(long2char.c[2]);
+  long2char.c[1] = Spi.transfer(long2char.c[1]);
+  long2char.c[0] = Spi.transfer(long2char.c[0]);
 
   return long2char.l;
 }
@@ -148,8 +132,7 @@ const byte  deselect) {
     do {
       i = Spi.transfer(0xff);
       counter++;
-    } 
-    while (i & 0x80 && counter < 0x1000);
+    } while (i & 0x80 && counter < 0x1000);
 
     // Check for CRC error
     // can't reliably retry unless deselect is allowed
@@ -199,11 +182,12 @@ byte mmc::initialize() {
       // kills my Sandisk 1G which requires the retries in the first place
       // deselectCard();
     }
-  } 
+  }
+
   while (i > 1 && counter-- > 0);
 
   if (counter > 0) {
-    answer = spiTransferLong(0);
+	answer = spiTransferLong(0);
 
     // See if the card likes our supply voltage
     if (!(answer & SD_SUPPLY_VOLTAGE)) {
@@ -219,8 +203,7 @@ byte mmc::initialize() {
   do {
     i = sendCommand(SEND_OP_COND, 1L<<30, DESELECT_AFTER);
     counter--;
-  } 
-  while (i != 0 && counter > 0);
+  } while (i != 0 && counter > 0);
 
   if (counter==0) {
     return STA_NOINIT | STA_NODISK;
@@ -239,7 +222,6 @@ byte mmc::initialize() {
 
 byte mmc::readSector(byte *buffer, uint32_t sector) {
   byte res,tmp,errorcount;
-  uint16_t crc,recvcrc;
 
     errorcount = 0;
     while (errorcount < CONFIG_SD_AUTO_RETRIES) {
@@ -261,14 +243,10 @@ byte mmc::readSector(byte *buffer, uint32_t sector) {
       uint16_t i;
 
       // Get data
-      crc = 0;
       for (i=0; i<512; i++) {
         tmp = Spi.transfer(0xff);
         *(buffer++) = tmp;
       }
-
-      // Check CRC
-      recvcrc = (Spi.transfer(0xFF) << 8) + Spi.transfer(0xFF);
 
       break;
     }
@@ -281,7 +259,6 @@ byte mmc::readSector(byte *buffer, uint32_t sector) {
 
 byte mmc::writeSector(const byte *buffer, uint32_t sector) {
   byte res,errorcount,status;
-  uint16_t crc;
 
     errorcount = 0;
     while (errorcount < CONFIG_SD_AUTO_RETRIES) {
@@ -300,14 +277,13 @@ byte mmc::writeSector(const byte *buffer, uint32_t sector) {
       const byte *oldbuffer = buffer;
 
       // Send data
-      crc = 0;
       for (i=0; i<512; i++) {
         Spi.transfer(*(buffer++));
       }
 
       // Send CRC
-      Spi.transfer(crc >> 8);
-      Spi.transfer(crc & 0xff);
+      Spi.transfer(0);
+      Spi.transfer(0);
 
       // Get and check status feedback
       status = Spi.transfer(0xFF);
