@@ -11,11 +11,11 @@
 #include "mmc.h"
 
 static struct{
-  unsigned short sectorsPerCluster;
-  unsigned short bytesPerCluster;
-  unsigned long rootDirSect,
-				FAT1Sector,
-			    cluster2;
+  word sectorsPerCluster;
+  word bytesPerCluster;
+  word cluster2;
+  word FAT1Sector;
+  word rootDirSect;
   directory_entry* de;
   byte* buffer;
   bool isFATLoaded;
@@ -28,7 +28,7 @@ static struct{
 // Load first sector of FAT1 into the buffer
 bool loadFAT1() {
 	if( !vars.isFATLoaded) {
-		if (RES_OK == mmc::readSectors(vars.buffer, vars.FAT1Sector, 1)) {
+		if (RES_OK == mmc::readSector(vars.buffer, vars.FAT1Sector)) {
 			vars.isFATLoaded = true;
 		} else {
 			return false;
@@ -63,7 +63,7 @@ word chainNextCluster(word cluster) {
 		clusters[cluster] = newCluster;
 	}
 
-	if (RES_OK != mmc::writeSectors(vars.buffer, vars.FAT1Sector, 1)) {
+	if (RES_OK != mmc::writeSector(vars.buffer, vars.FAT1Sector)) {
 		return 0xFFFF;
 	}
 
@@ -85,7 +85,7 @@ bool nanofat::initialize(byte* buffer) {
   }
 
   // Read first sector, the MBR, and write it to given buffer
-  if (RES_OK != mmc::readSectors(vars.buffer, 0, 1)) {
+  if (RES_OK != mmc::readSector(vars.buffer, 0)) {
     return false;
   }  
 
@@ -94,7 +94,7 @@ bool nanofat::initialize(byte* buffer) {
   unsigned long bootSector = p->lbaAddrOfFirstSector;
 
   // Read the first sector of first partition on disk (VBR=Volume Boot Record)
-  if (RES_OK != mmc::readSectors(vars.buffer, bootSector, 1)) {
+  if (RES_OK != mmc::readSector(vars.buffer, bootSector)) {
     return false;
   }
 
@@ -141,7 +141,7 @@ bool locateFileStart(const char* filename,
 					 unsigned long &size) {
 
   // Read the root folder's first sector
-  if (RES_OK == mmc::readSectors(vars.buffer, vars.rootDirSect, 1)) {
+  if (RES_OK == mmc::readSector(vars.buffer, vars.rootDirSect)) {
 	vars.isFATLoaded = false;
 
     // Pack the file name in "eight-plus-three" format
@@ -156,28 +156,26 @@ bool locateFileStart(const char* filename,
       } else {
         j = 8;
       }
-
     }
 
     // The file MUST be located in root folder, and there MUST NOT be a lot of files
     // in the root folder, as we only check first sector of root folder...
     for (unsigned int i = 0; i < BYTESPERSECTOR; i += 32) {
-      directory_entry* de = (directory_entry*)&vars.buffer[i];
-	  vars.de = de;
+	  vars.de = (directory_entry*)&vars.buffer[i];
 
       // don't match with deleted, [system/volname/subdir/hidden] files
-      if (de->filespec[0] != 0xe5 && (de->attributes & 0x1e) == 0 && memcmp(cookedName, de->filespec, 11) == 0) {
-        size = de->fileSize;
+      if (vars.de->filespec[0] != 0xe5 && (vars.de->attributes & 0x1e) == 0 && memcmp(cookedName, vars.de->filespec, 11) == 0) {
+        size = vars.de->fileSize;
 		if( size == 0) {
 			// Allocate the first sector
 			// ToDo: 1. Load FAT to find the first empty cluster
 			//		 2. Put an 0xFFFF in this cluster entry to mark as last cluster in file
 			//		 3. Write the FAT to disk
 			//		 4. Reload the root folder sector
-			//		 5. Store the located cluster in the the de->startCluster field
+			//		 5. Store the located cluster in the de->startCluster field
 			//		 6. Write the root folder to disk
 		} else {
-			firstSector = vars.cluster2 + ((de->startCluster-2) * vars.sectorsPerCluster);
+			firstSector = vars.cluster2 + ((vars.de->startCluster-2) * vars.sectorsPerCluster);
 		}
         return true;
       }
@@ -195,7 +193,7 @@ bool incFileSize(unsigned long extraSize) {
     vars.de->fileSize += extraSize;
 
 	// Write rootDir sector
-    if (RES_OK != mmc::writeSectors(vars.buffer, vars.rootDirSect, 1)) {
+    if (RES_OK != mmc::writeSector(vars.buffer, vars.rootDirSect)) {
 		return false;
 	}
 	
@@ -228,7 +226,7 @@ static unsigned long fileLength;
 		unsigned long lastSector = vars.cluster2 + ((lastCluster-2) * vars.sectorsPerCluster) + sectorsInLastCluster;
 
 		// We need to read this sector, as we're trying to append
-		if (RES_OK == mmc::readSectors(vars.buffer, lastSector, 1)) {
+		if (RES_OK == mmc::readSector(vars.buffer, lastSector)) {
 			vars.isFATLoaded = false;
 		} else {
 			return false;
@@ -244,7 +242,7 @@ static unsigned long fileLength;
 		for(word i=0, j=bytesInLastSector; i<bytesToWrite; i++, j++) {
 			vars.buffer[j] = buffer[i];
 		}
-		if (RES_OK != mmc::writeSectors(vars.buffer, lastSector, 1)) {
+		if (RES_OK != mmc::writeSector(vars.buffer, lastSector)) {
 			return false;
 		}
 		buffer += bytesToWrite;
@@ -279,7 +277,7 @@ static unsigned long fileLength;
 				vars.buffer[i] = buffer[i];
 			}
 
-			if (RES_OK != mmc::writeSectors(vars.buffer, lastSector, 1)) {
+			if (RES_OK != mmc::writeSector(vars.buffer, lastSector)) {
 				return false;
 			}
 

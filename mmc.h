@@ -1,4 +1,12 @@
-/* contains code from:
+/* 
+Original code has been modified to remove SPI functions and
+couple to Arduino SPI library instead.
+Also, as I'm going to read/write only 1 sector per time,
+I have simplified the interface
+
+Eduardo Garcia (egarcia@stream18.com)
+
+contains code from:
 
 sd2iec - SD/MMC to Commodore serial bus interface/controller
    Copyright (C) 2007,2008  Ingo Korb <ingo@akana.de>
@@ -42,6 +50,8 @@ sd2iec - SD/MMC to Commodore serial bus interface/controller
 
 #include <WProgram.h>
 #include <inttypes.h>
+#include "Spi.h"
+
 
 const unsigned short BYTESPERSECTOR = 512;
 
@@ -127,37 +137,33 @@ namespace mmc {
   byte initialize();
 
   /**
-   * readSectors - reads sectors from the SD card to buffer
+   * readSector - reads 1 sector from the SD card to buffer
    * @buffer: pointer to the buffer
-   * @sector: first sector to be read
-   * @count : number of sectors to be read
-   * @offset1: starting point where to write in buffer 
-   * @offset2: starting point where to read from the file
+   * @sector: sector to be read
    *
-   * This function reads count sectors from the SD card starting
-   * at sector to buffer. Returns RES_ERROR if an error occured or
+   * This function reads one sectors from the SD card
+   * to buffer. Returns RES_ERROR if an error occured or
    * RES_OK if successful. Up to SD_AUTO_RETRIES will be made if
    * the calculated data CRC does not match the one sent by the
    * card. If there were errors during the command transmission
    * disk_state will be set to DISK_ERROR and no retries are made.
    */
-  byte readSectors(byte *buffer, unsigned long sector, byte count);
+  byte readSector(byte *buffer, unsigned long sector);
 
   /**
-   * writeSectors - writes sectors from buffer to the SD card
+   * writeSector - writes one sector from buffer to the SD card
    * @buffer: pointer to the buffer
-   * @sector: first sector to be written
-   * @count : number of sectors to be written
+   * @sector: sector to be written
    *
-   * This function writes count sectors from buffer to the SD card
-   * starting at sector. Returns RES_ERROR if an error occured,
+   * This function writes one sector from buffer to the SD card.
+   * Returns RES_ERROR if an error occured,
    * RES_WPRT if the card is currently write-protected or RES_OK
    * if successful. Up to SD_AUTO_RETRIES will be made if the card
    * signals a CRC error. If there were errors during the command
    * transmission disk_state will be set to DISK_ERROR and no retries
    * are made.
    */
-  byte writeSectors(const byte *buffer, uint32_t sector, byte count);
+  byte writeSector(const byte *buffer, uint32_t sector);
 
   /**
    * sendCommand - send a command to the SD card
